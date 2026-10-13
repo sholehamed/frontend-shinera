@@ -1,5 +1,5 @@
-import { Component, Input, ViewChild } from '@angular/core';
-import { RouterLink } from '@angular/router';
+import { Component, inject, Input, ViewChild } from '@angular/core';
+import { Route, Router, RouterLink } from '@angular/router';
 import { ReactiveFormsModule, FormControl, FormGroup, Validators } from '@angular/forms';
 
 import { MatInputModule } from '@angular/material/input';
@@ -34,6 +34,8 @@ import { CustomizerSettingsService } from '../../../services/customizer-settings
 export class SignInComponent {
   @ViewChild(CaptchaComponent) captchaComponent?: CaptchaComponent;
 @Input()login_context:string='tenant'
+@Input() returnUrl!:string
+router:Router=inject(Router)
   AppName = environment.AppName;
   ApiUrl = environment.apiUrl;
 
@@ -54,7 +56,45 @@ export class SignInComponent {
       validators: [Validators.required],
     }),
   });
+private getRedirectUrl(): string {
+  const context = this.login_context;
 
+  const fallback = context === 'system'
+    ? '/system/dashboard'
+    : '/dashboard';
+
+  const returnUrl =
+    this.returnUrl;
+
+  if (
+    !returnUrl ||
+    !returnUrl.startsWith('/') ||
+    returnUrl.startsWith('//') ||
+    returnUrl.includes('\\') ||
+    returnUrl.includes('..')
+  ) {
+    return fallback;
+  }
+
+  try {
+    const tree = this.router.parseUrl(returnUrl);
+
+    const segments =
+      tree.root.children['primary']
+        ?.segments.map(x => x.path) ?? [];
+
+    const allowed = context === 'system'
+      ? segments[0] === 'system' &&
+        segments[1] !== 'auth'
+      : segments.length > 0 &&
+        segments[0] !== 'system' &&
+        segments[0] !== 'auth';
+
+    return allowed ? returnUrl : fallback;
+  } catch {
+    return fallback;
+  }
+}
   constructor(
     public themeService: CustomizerSettingsService,
     private authService: AuthService,
@@ -82,15 +122,25 @@ export class SignInComponent {
       captchaCode,
       this.captchaToken,this.login_context
     ).subscribe({
-      next: (response) => {
-        this.authService.saveTokens(response)
-      },
-      error: (d) => {
-        
-        this.loginForm.controls.captchaCode.setValue('');
-        this.captchaToken = '';
-        this.captchaComponent?.reload();
-      },
-    });
+  next: user => {
+
+    if (user.account_type !== this.login_context) {
+      this.authService.logout();
+      // Show invalid account context message.
+      return;
+    }
+
+    void this.router.navigateByUrl(
+      this.getRedirectUrl(),
+      { replaceUrl: true }
+    );
+  },
+
+  error: error => {
+    this.loginForm.controls.captchaCode.setValue('');
+    this.captchaToken = '';
+    this.captchaComponent?.reload();
+  }
+});
   }
 }

@@ -1,6 +1,6 @@
 import { inject, Injectable } from '@angular/core';
 import { HttpClient, HttpHeaders, HttpParams } from '@angular/common/http';
-import { Observable, tap, throwError } from 'rxjs';
+import { catchError, Observable, switchMap, tap, throwError } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { TenantContextService } from './tenant-context.service';
 import { TokenStorageService } from './token-storage.service';
@@ -12,14 +12,16 @@ export interface AuthTokens {
   refresh_token?: string;
   scope?: string;
 }
+export type LoginContext = 'system' | 'tenant';
+
 export interface UserInfo {
-  sub?: string;
-  username?: string;
-  email?: string;
+  sub: string;
+  username: string;
   given_name: string;
-  picture: string;
-  tenant: string;
-  tenant_id: string;
+  picture?: string | null;
+  tenant?: string | null;
+  tenant_id?: string | null;
+  account_type: LoginContext;
 }
 
 @Injectable({
@@ -36,7 +38,7 @@ export class AuthService {
     captchaCode: string,
     captchaId: string,
     login_context: string,
-  ): Observable<AuthTokens> {
+  ): Observable<UserInfo> {
     const body = new URLSearchParams();
 
     body.set('grant_type', environment.grant_type);
@@ -55,13 +57,38 @@ export class AuthService {
       'Content-Type': 'application/x-www-form-urlencoded',
     });
 
-    return this._http
-      .post<AuthTokens>(environment.apiUrl + '/system/Auth/login', body.toString(), { headers })
-      .pipe(
-        tap((response) => {
-          this.saveTokens(response);
-        }),
-      );
+    return this._http.post<AuthTokens>(
+  environment.apiUrl + '/system/Auth/login',
+  body.toString(),
+  { headers }
+).pipe(
+  tap(tokens => {
+    this._tokenStorage.setTokens(
+      tokens.access_token,
+      tokens.refresh_token ?? ''
+    );
+  }),
+
+  switchMap(tokens =>
+    this._http.get<UserInfo>(
+      environment.apiUrl + '/system/Auth/userinfo',
+      {
+        headers: {
+          Authorization: `Bearer ${tokens.access_token}`
+        }
+      }
+    )
+  ),
+
+  tap(user => {
+    this.saveUserInfo(user);
+  }),
+
+  catchError(error => {
+    this._tokenStorage.clear();
+    return throwError(() => error);
+  })
+);
   }
   CallUserInfo() {
     this._http.get<UserInfo>(environment.apiUrl + '/system/Auth/userinfo').subscribe((d) => {
@@ -82,7 +109,7 @@ export class AuthService {
     this.CallUserInfo();
   }
   saveUserInfo(info: UserInfo) {
-    this._tokenStorage.setUserInfo(info.given_name, info.tenant_id, info.tenant, info.picture);
+    this._tokenStorage.setUserInfo(info.given_name, info.tenant_id!, info.tenant!, info.picture!,info.account_type,info.username,info.sub);
   }
   getFullName() {
     return this._tokenStorage.getUserFullname();
@@ -96,6 +123,9 @@ export class AuthService {
       picture: this._tokenStorage.getUserPicture()!,
       tenant: this._tokenStorage.getUsertenant()!,
       tenant_id: this._tokenStorage.getUsertenantId()!,
+      account_type: this._tokenStorage.getAccountType()! as LoginContext,
+      username:this._tokenStorage.getUsername()!,
+      sub:this._tokenStorage.getUserSub()!
     };
     return info;
   }

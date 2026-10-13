@@ -4,8 +4,11 @@ const ACCESS_TOKEN_KEY = 'access_token';
 const REFRESH_TOKEN_KEY = 'refresh_token';
 const Tenant = 'tenant';
 const TenantId = 'tenantId';
+const AccountType = 'account_type';
 const FullName = 'fullname';
 const Picure = 'picture';
+const Username = 'username';
+const Sub = 'sub';
 
 @Injectable({
   providedIn: 'root'
@@ -23,11 +26,14 @@ export class TokenStorageService {
     localStorage.setItem(ACCESS_TOKEN_KEY, accessToken);
     localStorage.setItem(REFRESH_TOKEN_KEY, refreshToken);
   }
-  setUserInfo(fullName:string,tenantId:string,tenant:string,picture:string){
+  setUserInfo(fullName:string,tenantId:string,tenant:string,picture:string,accountType:string,username:string,sub:string){
     localStorage.setItem(Tenant, tenant);
     localStorage.setItem(TenantId, tenantId);
     localStorage.setItem(FullName, fullName);
     localStorage.setItem(Picure, picture);
+    localStorage.setItem(AccountType, accountType);
+    localStorage.setItem(Username, username);
+    localStorage.setItem(Sub, sub);
   }
   getUserFullname(){
         return localStorage.getItem(FullName);
@@ -38,8 +44,17 @@ export class TokenStorageService {
   getUsertenantId(){
        return localStorage.getItem(TenantId);
   }
+  getAccountType(){
+       return localStorage.getItem(AccountType);
+  }
   getUserPicture(){
        return localStorage.getItem(Picure);
+  }
+  getUsername(){
+       return localStorage.getItem(Username);
+  }
+  getUserSub(){
+       return localStorage.getItem(Sub);
   }
   clear(): void {
     localStorage.removeItem(ACCESS_TOKEN_KEY);
