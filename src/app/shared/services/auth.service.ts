@@ -5,33 +5,38 @@ import { environment } from '../../../environments/environment';
 import { TenantContextService } from './tenant-context.service';
 import { TokenStorageService } from './token-storage.service';
 
-
 export interface AuthTokens {
-   access_token: string;
+  access_token: string;
   expires_in: number;
   token_type: string;
   refresh_token?: string;
   scope?: string;
 }
-export interface UserInfo{
- sub? :string;
- username?:string;
- email?:string;
- given_name:string;
- picture:string;
- tenant:string;
- tenant_id:string;
+export interface UserInfo {
+  sub?: string;
+  username?: string;
+  email?: string;
+  given_name: string;
+  picture: string;
+  tenant: string;
+  tenant_id: string;
 }
 
 @Injectable({
-  providedIn: 'root'
+  providedIn: 'root',
 })
 export class AuthService {
-_http=inject(HttpClient)
-_tenant=inject(TenantContextService)
-_tokenStorage=inject(TokenStorageService)
+  _http = inject(HttpClient);
+  _tenant = inject(TenantContextService);
+  _tokenStorage = inject(TokenStorageService);
 
-login(username:string,password:string, captchaCode:string, captchaId:string): Observable<AuthTokens> {
+  login(
+    username: string,
+    password: string,
+    captchaCode: string,
+    captchaId: string,
+    login_context: string,
+  ): Observable<AuthTokens> {
     const body = new URLSearchParams();
 
     body.set('grant_type', environment.grant_type);
@@ -41,28 +46,27 @@ login(username:string,password:string, captchaCode:string, captchaId:string): Ob
     body.set('userEnteredCaptchaCode', captchaCode);
     body.set('captchaId', captchaId);
     body.set('scope', environment.scope);
-    body.set('tenant', this._tenant.current!.slug);
+    body.set('login_context', login_context);
+    if (this._tenant.current) {
+      body.set('tenant', this._tenant.current!.slug);
+    }
 
     const headers = new HttpHeaders({
-      'Content-Type': 'application/x-www-form-urlencoded'
+      'Content-Type': 'application/x-www-form-urlencoded',
     });
 
-    return this._http.post<AuthTokens>(
-      environment.apiUrl + '/system/Auth/login',
-      body.toString(),
-      { headers }
-    ).pipe(
-      tap(response => {
-        
-       this.saveTokens(response)
-      })
-    );
+    return this._http
+      .post<AuthTokens>(environment.apiUrl + '/system/Auth/login', body.toString(), { headers })
+      .pipe(
+        tap((response) => {
+          this.saveTokens(response);
+        }),
+      );
   }
-  CallUserInfo(){
-    this._http.get<UserInfo>(environment.apiUrl +'/system/Auth/userinfo').subscribe(d=>{
-        this.saveUserInfo(d)
-       
-    })
+  CallUserInfo() {
+    this._http.get<UserInfo>(environment.apiUrl + '/system/Auth/userinfo').subscribe((d) => {
+      this.saveUserInfo(d);
+    });
   }
   getAccessToken(): string | null {
     return this._tokenStorage.getAccessToken();
@@ -73,52 +77,48 @@ login(username:string,password:string, captchaCode:string, captchaId:string): Ob
   }
 
   saveTokens(tokens: AuthTokens): void {
-    debugger
+    debugger;
     this._tokenStorage.setTokens(tokens.access_token, tokens.refresh_token!);
-    this.CallUserInfo()
+    this.CallUserInfo();
   }
-  saveUserInfo(info:UserInfo){
-    this._tokenStorage.setUserInfo(info.given_name,info.tenant_id,info.tenant,info.picture)
+  saveUserInfo(info: UserInfo) {
+    this._tokenStorage.setUserInfo(info.given_name, info.tenant_id, info.tenant, info.picture);
   }
-  getFullName(){
-    return this._tokenStorage.getUserFullname()
+  getFullName() {
+    return this._tokenStorage.getUserFullname();
   }
-  getUserPicture(){
-    return this._tokenStorage.getUserPicture()
+  getUserPicture() {
+    return this._tokenStorage.getUserPicture();
   }
-  getUserInfo(){
-    const info:UserInfo={
-        given_name:this._tokenStorage.getUserFullname()!,
-        picture:this._tokenStorage.getUserPicture()!,
-        tenant:this._tokenStorage.getUsertenant()!,
-        tenant_id:this._tokenStorage.getUsertenantId()!
+  getUserInfo() {
+    const info: UserInfo = {
+      given_name: this._tokenStorage.getUserFullname()!,
+      picture: this._tokenStorage.getUserPicture()!,
+      tenant: this._tokenStorage.getUsertenant()!,
+      tenant_id: this._tokenStorage.getUsertenantId()!,
+    };
+    return info;
+  }
+
+  refreshToken(): Observable<AuthTokens> {
+    const refreshToken = this.getRefreshToken();
+
+    if (!refreshToken) {
+      this.logout();
+      return throwError(() => new Error('Refresh token not found.'));
     }
-    return info
+
+    const body = new HttpParams()
+      .set('grant_type', 'refresh_token')
+      .set('client_id', environment.client_id)
+      .set('refresh_token', refreshToken);
+
+    return this._http.post<AuthTokens>(environment.apiUrl + '/system/Auth/login', body).pipe(
+      tap((tokens) => {
+        this.saveTokens(tokens);
+      }),
+    );
   }
-
- refreshToken(): Observable<AuthTokens> {
-  const refreshToken = this.getRefreshToken();
-
-  if (!refreshToken) {
-    this.logout();
-    return throwError(() => new Error('Refresh token not found.'));
-  }
-
-  const body = new HttpParams()
-    .set('grant_type', 'refresh_token')
-    .set('client_id', environment.client_id)
-    .set('refresh_token', refreshToken);
-
-  return this._http.post<AuthTokens>(
-    environment.apiUrl + '/system/Auth/login',
-    body
-  ).pipe(
-    tap((tokens) => {
-      this.saveTokens(tokens);
-    })
-  );
-}
-
 
   logout(): void {
     this._tokenStorage.clear();

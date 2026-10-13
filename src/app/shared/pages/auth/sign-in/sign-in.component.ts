@@ -1,4 +1,4 @@
-import { Component, ViewChild } from '@angular/core';
+import { Component, Input, ViewChild } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { ReactiveFormsModule, FormControl, FormGroup, Validators } from '@angular/forms';
 
@@ -33,7 +33,7 @@ import { CustomizerSettingsService } from '../../../services/customizer-settings
 })
 export class SignInComponent {
   @ViewChild(CaptchaComponent) captchaComponent?: CaptchaComponent;
-
+@Input()login_context:string='tenant'
   AppName = environment.AppName;
   ApiUrl = environment.apiUrl;
 
@@ -80,7 +80,7 @@ export class SignInComponent {
       username,
       password,
       captchaCode,
-      this.captchaToken,
+      this.captchaToken,this.login_context
     ).subscribe({
       next: (response) => {
         this.authService.saveTokens(response)
